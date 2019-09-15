@@ -1182,9 +1182,23 @@ module Contents : sig
 
   (** Contents store. *)
   module type STORE = sig
-    include CONTENT_ADDRESSABLE_STORE
+    type 'a t
 
-    val merge : [ `Read | `Write ] t -> key option Merge.t
+    type key
+
+    type path
+
+    type value
+
+    val mem : [> `Read ] t -> key -> bool Lwt.t
+
+    val find : [> `Read ] t -> key -> path -> value option Lwt.t
+
+    val add : [> `Write ] t -> path -> value -> key Lwt.t
+
+    val unsafe_add : [> `Write ] t -> key -> string -> unit Lwt.t
+
+    val merge : [ `Read | `Write ] t -> path -> key option Merge.t
     (** [merge t] lifts the merge functions defined on contents values
         to contents key. The merge function will: {e (i)} read the
         values associated with the given keys, {e (ii)} use the merge
@@ -1202,14 +1216,12 @@ module Contents : sig
   end
 
   (** [Store] creates a contents store. *)
-  module Store (S : sig
-    include CONTENT_ADDRESSABLE_STORE
-
-    module Key : Hash.S with type t = key
-
-    module Val : S with type t = value
-  end) :
-    STORE with type 'a t = 'a S.t and type key = S.key and type value = S.value
+  module Store
+    (S' : S.CONTENT_ADDRESSABLE_STORE with type value = string)
+    (K : S.HASH with type t = S'.key)
+    (V : S.CONTENTS)
+    (Z : S.SERIALIZE with type t = V.t) :
+    STORE with type 'a t = 'a S'.t and type key = K.t and type path = Z.key and type value = V.t
 end
 
 module Serialize : sig
@@ -1638,7 +1650,9 @@ module Private : sig
       module Path : Path.S
       (** [Path] provides base functions on node paths. *)
 
-      val merge : [ `Read | `Write ] t -> key option Merge.t
+      type path = Path.t
+
+      val merge : [ `Read | `Write ] t -> path -> key option Merge.t
       (** [merge] is the 3-way merge function for nodes keys. *)
 
       (** [Key] provides base functions for node keys. *)
@@ -1655,14 +1669,14 @@ module Private : sig
            and type metadata = Metadata.t
            and type step = Path.step
 
-      module Contents : Contents.STORE with type key = Val.hash
+      module Contents : Contents.STORE with type key = Val.hash and type path = Path.t
       (** [Contents] is the underlying contents store. *)
     end
 
     (** [Store] creates node stores. *)
     module Store
         (C : Contents.STORE)
-        (P : Path.S)
+        (P : Path.S with type t = C.path)
         (M : Metadata.S) (S : sig
           include CONTENT_ADDRESSABLE_STORE with type key = C.key
 
@@ -2078,7 +2092,7 @@ module Private : sig
 
     (** Private node store. *)
     module Node :
-      Node.STORE with type key = Hash.t and type Val.hash = Contents.key
+      Node.STORE with type key = Hash.t and type Val.hash = Contents.key and type Path.t = Contents.path
 
     (** Private commit store. *)
     module Commit :
@@ -2432,7 +2446,7 @@ module type S = sig
     val hash : contents -> hash
     (** [hash c] it [c]'s hash in the repository [r]. *)
 
-    val of_hash : repo -> hash -> contents option Lwt.t
+    val of_hash : repo -> hash -> key -> contents option Lwt.t
     (** [of_hash r h] is the the contents object in [r] having [h] as
         hash, or [None] is no such contents object exists. *)
   end
@@ -3175,6 +3189,7 @@ module type S = sig
     include
       Private.S
         with type Contents.value = contents
+         and type Contents.path = Key.t
          and module Node.Path = Key
          and type Hash.t = Hash.t
          and type Node.Metadata.t = metadata
@@ -3207,7 +3222,7 @@ module type S = sig
   (** [of_private_commit r c] is the commit associated with the
      private commit object [c]. *)
 
-  val save_contents : [> `Write ] Private.Contents.t -> contents -> hash Lwt.t
+  val save_contents : [> `Write ] Private.Contents.t -> key -> contents -> hash Lwt.t
   (** Save a content into the database *)
 
   val save_tree :
@@ -3216,6 +3231,7 @@ module type S = sig
     [> `Write ] Private.Contents.t ->
     [ `Read | `Write ] Private.Node.t ->
     tree ->
+    key ->
     hash Lwt.t
   (** Save a tree into the database. Does not do any reads. If
         [clear] is set (it is by default), the tree cache will be
@@ -3710,7 +3726,8 @@ module Make_ext
               with type metadata = Metadata.t
                and type hash = Hash.t
                and type step = Path.step)
-    (Commit : Private.Commit.S with type hash = Hash.t) :
+    (Commit : Private.Commit.S with type hash = Hash.t)
+    (Serialize : S.SERIALIZE with type t = Contents.t and type key = Path.t) :
   S
     with type key = Path.t
      and type contents = Contents.t

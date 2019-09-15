@@ -265,39 +265,47 @@ end
 
 module type STORE = S.CONTENTS_STORE
 
-module Store (S : sig
-  include S.CONTENT_ADDRESSABLE_STORE
-
-  module Key : S.HASH with type t = key
-
-  module Val : S.CONTENTS with type t = value
-end) =
+module Store
+  (S' : S.CONTENT_ADDRESSABLE_STORE with type value = string)
+  (K : S.HASH with type t = S'.key)
+  (V : S.CONTENTS)
+  (Z : S.SERIALIZE with type t = V.t) =
 struct
-  module Key = Hash.Typed (S.Key) (S.Val)
-  module Val = S.Val
+  module S = S'
+  module Key = Hash.Typed (K) (V)
+  module Val = V
 
   type 'a t = 'a S.t
 
-  type key = S.key
+  type key = K.t
 
-  type value = S.value
+  type path = Z.key
 
-  let find = S.find
+  type value = V.t
 
-  let add = S.add
+  let find t k p =
+    S.find t k >|= function
+    | None -> None
+    | Some buf ->
+        match Serialize.of_bin_string (module Z) p buf with
+        | Ok v -> Some v
+        | Error (`Msg msg) -> failwith msg
+
+  let add t p v =
+    S.add t (Serialize.to_bin_string (module Z) p v)
 
   let unsafe_add = S.unsafe_add
 
   let mem = S.mem
 
-  let read_opt t = function None -> Lwt.return_none | Some k -> find t k
+  let read_opt t p = function None -> Lwt.return_none | Some k -> find t k p
 
-  let add_opt t = function
+  let add_opt t p = function
     | None -> Lwt.return_none
-    | Some v -> add t v >>= fun k -> Lwt.return_some k
+    | Some v -> add t p v >>= fun k -> Lwt.return_some k
 
-  let merge t =
-    Merge.like_lwt Type.(option Key.t) Val.merge (read_opt t) (add_opt t)
+  let merge t p =
+    Merge.like_lwt Type.(option Key.t) Val.merge (read_opt t p) (add_opt t p)
 end
 
 module V1 = struct

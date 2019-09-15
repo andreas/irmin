@@ -145,9 +145,23 @@ module type METADATA = sig
 end
 
 module type CONTENTS_STORE = sig
-  include CONTENT_ADDRESSABLE_STORE
+  type 'a t
 
-  val merge : [ `Read | `Write ] t -> key option Merge.t
+  type key
+
+  type path
+
+  type value
+
+  val mem : [> `Read ] t -> key -> bool Lwt.t
+
+  val find : [> `Read ] t -> key -> path -> value option Lwt.t
+
+  val add : [> `Write ] t -> path -> value -> key Lwt.t
+
+  val unsafe_add : [> `Write ] t -> key -> string -> unit Lwt.t
+
+  val merge : [ `Read | `Write ] t -> path -> key option Merge.t
 
   module Key : TYPED_HASH with type t = key and type value = value
 
@@ -240,7 +254,9 @@ module type NODE_STORE = sig
 
   module Path : PATH
 
-  val merge : [ `Read | `Write ] t -> key option Merge.t
+  type path = Path.t
+
+  val merge : [ `Read | `Write ] t -> path -> key option Merge.t
 
   module Key : TYPED_HASH with type t = key and type value = value
 
@@ -253,7 +269,7 @@ module type NODE_STORE = sig
        and type metadata = Metadata.t
        and type step = Path.step
 
-  module Contents : CONTENTS_STORE with type key = Val.hash
+  module Contents : CONTENTS_STORE with type key = Val.hash and type path = Path.t
 end
 
 type config = Conf.t
@@ -460,7 +476,7 @@ module type PRIVATE = sig
   module Contents : CONTENTS_STORE with type key = Hash.t
 
   module Node :
-    NODE_STORE with type key = Hash.t and type Val.hash = Contents.key
+    NODE_STORE with type key = Hash.t and type Val.hash = Contents.key and type Path.t = Contents.path
 
   module Commit :
     COMMIT_STORE with type key = Hash.t and type Val.hash = Node.key
@@ -754,7 +770,7 @@ module type STORE = sig
 
     val hash : contents -> hash
 
-    val of_hash : Repo.t -> hash -> contents option Lwt.t
+    val of_hash : Repo.t -> hash -> key -> contents option Lwt.t
   end
 
   module Tree : sig
@@ -1082,6 +1098,7 @@ module type STORE = sig
     include
       PRIVATE
         with type Contents.value = contents
+         and type Contents.path = Key.t
          and module Hash = Hash
          and module Node.Path = Key
          and type Node.Metadata.t = metadata
@@ -1100,7 +1117,7 @@ module type STORE = sig
 
   val of_private_commit : repo -> Private.Commit.value -> commit
 
-  val save_contents : [> `Write ] Private.Contents.t -> contents -> hash Lwt.t
+  val save_contents : [> `Write ] Private.Contents.t -> Private.Contents.path -> contents -> hash Lwt.t
 
   val save_tree :
     ?clear:bool ->
@@ -1108,6 +1125,7 @@ module type STORE = sig
     [> `Write ] Private.Contents.t ->
     [ `Read | `Write ] Private.Node.t ->
     tree ->
+    key ->
     hash Lwt.t
 end
 

@@ -93,11 +93,11 @@ module Make (P : S.PRIVATE) = struct
      fun tr -> match hash tr with `Node h -> h | `Contents (h, _) -> h
   end
 
-  let save_contents b c = P.Contents.add b c
+  let save_contents b p c = P.Contents.add b p c
 
-  let save_tree ?(clear = true) r x y (tr : Tree.tree) =
+  let save_tree ?(clear = true) r x y (tr : Tree.tree) p =
     match tr with
-    | `Contents (c, _) -> save_contents x c
+    | `Contents (c, _) -> save_contents x p c
     | `Node n -> Tree.export ~clear r x y n
 
   type node = Tree.node
@@ -277,7 +277,7 @@ module Make (P : S.PRIVATE) = struct
         >>= fun () ->
         Lwt_list.iter_p
           (fun k ->
-            P.Contents.find (contents_t t) k >>= function
+            P.Contents.find (contents_t t) k P.Node.Path.empty >>= function (* FIXME *)
             | None -> Lwt.return_unit
             | Some m -> P.Slice.add slice (`Contents (k, m)))
           (KSet.elements !contents)
@@ -316,7 +316,7 @@ module Make (P : S.PRIVATE) = struct
       Lwt.catch
         (fun () ->
           Lwt_list.iter_p
-            (aux "Contents" (P.Contents.add contents_t) P.Contents.Key.t)
+            (aux "Contents" (P.Contents.add contents_t P.Node.Path.empty) P.Contents.Key.t) (* FIXME *)
             !contents
           >>= fun () ->
           Lwt_list.iter_p (aux "Node" (P.Node.add node_t) P.Node.Key.t) !nodes

@@ -31,7 +31,7 @@ module Make
 
 module Store
     (C : S.CONTENTS_STORE)
-    (P : S.PATH)
+    (P : S.PATH with type t = C.path)
     (M : S.METADATA) (N : sig
       include S.CONTENT_ADDRESSABLE_STORE with type key = C.key
 

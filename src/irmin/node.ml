@@ -144,7 +144,7 @@ end
 
 module Store
     (C : S.CONTENTS_STORE)
-    (P : S.PATH)
+    (P : S.PATH with type t = C.path)
     (M : S.METADATA) (S : sig
       include S.CONTENT_ADDRESSABLE_STORE with type key = C.key
 
@@ -166,6 +166,8 @@ struct
   type 'a t = 'a C.t * 'a S.t
 
   type key = S.key
+
+  type path = P.t
 
   type value = S.value
 
@@ -197,7 +199,7 @@ struct
 
   (* [Merge.alist] expects us to return an option. [C.merge] does
      that, but we need to consider the metadata too... *)
-  let merge_contents_meta c =
+  let merge_contents_meta c p =
     (* This gets us [C.t option, S.Val.Metadata.t]. We want [(C.t *
        S.Val.Metadata.t) option]. *)
     let explode = function
@@ -207,33 +209,33 @@ struct
     let implode = function None, _ -> None | Some c, m -> Some (c, m) in
     Merge.like
       Type.(option (pair contents_t metadata_t))
-      (Merge.pair (C.merge c) M.merge)
+      (Merge.pair (C.merge c p) M.merge)
       explode implode
 
-  let merge_contents_meta c =
+  let merge_contents_meta c p =
     Merge.alist step_t
       Type.(pair contents_t metadata_t)
-      (fun _step -> merge_contents_meta c)
+      (fun step -> merge_contents_meta c (Path.cons step p))
 
   let merge_parents merge_key =
     Merge.alist step_t S.Key.t (fun _step -> merge_key)
 
-  let merge_value (c, _) merge_key =
+  let merge_value (c, _) merge_key p =
     let explode t = (all_contents t, all_succ t) in
     let implode (contents, succ) =
       let xs = List.rev_map (fun (s, c) -> (s, `Contents c)) contents in
       let ys = List.rev_map (fun (s, n) -> (s, `Node n)) succ in
       S.Val.v (xs @ ys)
     in
-    let merge = Merge.pair (merge_contents_meta c) (merge_parents merge_key) in
+    let merge = Merge.pair (merge_contents_meta c p) (merge_parents merge_key) in
     Merge.like S.Val.t merge explode implode
 
-  let rec merge t =
+  let rec merge t p =
     let merge_key =
       Merge.v (Type.option S.Key.t) (fun ~old x y ->
-          Merge.(f (merge t)) ~old x y)
+          Merge.(f (merge t p)) ~old x y)
     in
-    let merge = merge_value t merge_key in
+    let merge = merge_value t merge_key p in
     let read = function
       | None -> Lwt.return S.Val.empty
       | Some k -> ( find t k >|= function None -> S.Val.empty | Some v -> v )

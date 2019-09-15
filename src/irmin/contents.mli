@@ -50,14 +50,13 @@ module V1 : sig
   module String : S.CONTENTS with type t = string
 end
 
-module Store (C : sig
-  include S.CONTENT_ADDRESSABLE_STORE
-
-  module Key : S.HASH with type t = key
-
-  module Val : S.CONTENTS with type t = value
-end) :
+module Store
+  (S' : S.CONTENT_ADDRESSABLE_STORE with type value = string)
+  (K : S.HASH with type t = S'.key)
+  (V : S.CONTENTS)
+  (Z : S.SERIALIZE with type t = V.t) :
   S.CONTENTS_STORE
-    with type 'a t = 'a C.t
-     and type key = C.key
-     and type value = C.value
+    with type 'a t = 'a S'.t
+     and type key = K.t
+     and type path = Z.key
+     and type value = V.t

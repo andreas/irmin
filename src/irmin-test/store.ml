@@ -66,9 +66,9 @@ module Make (S : S) = struct
 
   let h repo = P.Repo.commit_t repo
 
-  let v1 = long_random_string
+  let p1, v1 = ["long_random_string"], long_random_string
 
-  let v2 = ""
+  let p2, v2 = ["empty_string"], ""
 
   let with_contents repo f = P.Repo.batch repo (fun t _ _ -> f t)
 
@@ -76,9 +76,9 @@ module Make (S : S) = struct
 
   let with_commit repo f = P.Repo.batch repo (fun _ _ t -> f t)
 
-  let kv1 ~repo = with_contents repo (fun t -> P.Contents.add t v1)
+  let kv1 ~repo = with_contents repo (fun t -> P.Contents.add t p1 v1)
 
-  let kv2 ~repo = with_contents repo (fun t -> P.Contents.add t v2)
+  let kv2 ~repo = with_contents repo (fun t -> P.Contents.add t p2 v2)
 
   let normal x = `Contents (x, S.Metadata.default)
 
@@ -179,20 +179,20 @@ module Make (S : S) = struct
       let check_key = check P.Contents.Key.t in
       let check_val = check (T.option S.contents_t) in
       kv2 ~repo >>= fun kv2 ->
-      with_contents repo (fun t -> P.Contents.add t v2) >>= fun k2' ->
+      with_contents repo (fun t -> P.Contents.add t p2 v2) >>= fun k2' ->
       check_key "kv2" kv2 k2';
-      P.Contents.find t k2' >>= fun v2' ->
+      P.Contents.find t k2' p2 >>= fun v2' ->
       check_val "v2" (Some v2) v2';
-      with_contents repo (fun t -> P.Contents.add t v2) >>= fun k2'' ->
+      with_contents repo (fun t -> P.Contents.add t p2 v2) >>= fun k2'' ->
       check_key "kv2" kv2 k2'';
       kv1 ~repo >>= fun kv1 ->
-      with_contents repo (fun t -> P.Contents.add t v1) >>= fun k1' ->
+      with_contents repo (fun t -> P.Contents.add t p1 v1) >>= fun k1' ->
       check_key "kv1" kv1 k1';
-      with_contents repo (fun t -> P.Contents.add t v1) >>= fun k1'' ->
+      with_contents repo (fun t -> P.Contents.add t p1 v1) >>= fun k1'' ->
       check_key "kv1" kv1 k1'';
-      P.Contents.find t kv1 >>= fun v1' ->
+      P.Contents.find t kv1 p1 >>= fun v1' ->
       check_val "v1" (Some v1) v1';
-      P.Contents.find t kv2 >>= fun v2' ->
+      P.Contents.find t kv2 p2 >>= fun v2' ->
       check_val "v2" (Some v2) v2';
       Lwt.return_unit
     in
@@ -736,12 +736,12 @@ module Make (S : S) = struct
       in
       (* merge contents *)
       with_contents repo (fun v ->
-          Irmin.Merge.f (P.Contents.merge v) ~old:(old (Some kv1)) (Some kv1)
+          Irmin.Merge.f (P.Contents.merge v p1) ~old:(old (Some kv1)) (Some kv1)
             (Some kv1))
       >>= fun kv1' ->
       check_result "merge kv1" (Ok (Some kv1)) kv1';
       with_contents repo (fun v ->
-          Irmin.Merge.f (P.Contents.merge v) ~old:(old (Some kv1)) (Some kv1)
+          Irmin.Merge.f (P.Contents.merge v p2) ~old:(old (Some kv1)) (Some kv1)
             (Some kv2))
       >>= fun kv2' ->
       check_result "merge kv2" (Ok (Some kv2)) kv2';
@@ -760,7 +760,7 @@ module Make (S : S) = struct
                           t4 -b-> t1 -x-> (v1)
                              \c/ *)
       with_node repo (fun g ->
-          Irmin.Merge.(f @@ P.Node.merge g)
+          Irmin.Merge.(f @@ P.Node.merge g p1)
             ~old:(old (Some k0)) (Some k2) (Some k3))
       >>= fun k4 ->
       merge_exn "k4" k4 >>= fun k4 ->
@@ -1156,8 +1156,8 @@ module Make (S : S) = struct
   let empty_stats =
     { S.Tree.nodes = 0; leafs = 0; skips = 0; depth = 0; width = 0 }
 
-  let save_tree repo t =
-    P.Repo.batch repo (fun x y _ -> S.save_tree ~clear:false repo x y t)
+  let save_tree repo t p =
+    P.Repo.batch repo (fun x y _ -> S.save_tree ~clear:false repo x y t p)
     >|= fun _ -> ()
 
   let inspect =
@@ -1197,16 +1197,16 @@ module Make (S : S) = struct
       let v0 = S.Tree.empty in
       S.Tree.add v0 [ "foo" ] "foo" >>= fun v0 ->
       S.Tree.add v0 [ "bar" ] "foo" >>= fun v0 ->
-      save_tree repo v0 >>= fun () ->
+      save_tree repo v0 p1  >>= fun () ->
       S.Tree.get v0 [ "foo" ] >>= fun x ->
       S.Tree.get v0 [ "bar" ] >>= fun y ->
       Alcotest.(check bool) "hashconsing contents" true (x == y);
       S.Tree.add_tree v0 [ "a"; "b"; "c" ] v0 >>= fun v1 ->
       S.Tree.add_tree v0 [ "a"; "b"; "c" ] v0 >>= fun v2 ->
       S.Tree.add_tree v0 [ "x"; "b"; "c" ] v0 >>= fun v3 ->
-      save_tree repo v1 >>= fun () ->
-      save_tree repo v2 >>= fun () ->
-      save_tree repo v3 >>= fun () ->
+      save_tree repo v1 p1 >>= fun () ->
+      save_tree repo v2 p1 >>= fun () ->
+      save_tree repo v3 p1 >>= fun () ->
       Alcotest.(check inspect) "inspect v1:1" (`Node `Hash) (S.Tree.inspect v1);
       Alcotest.(check inspect) "inspect v2:1" (`Node `Hash) (S.Tree.inspect v2);
       Alcotest.(check inspect) "inspect v3:1" (`Node `Hash) (S.Tree.inspect v3);
@@ -1608,12 +1608,12 @@ module Make (S : S) = struct
       let t = P.Repo.contents_t repo in
       let write =
         write (fun _i ->
-            with_contents repo (fun t -> P.Contents.add t v) >>= fun _ ->
+            with_contents repo (fun t -> P.Contents.add t p2 v) >>= fun _ ->
             Lwt.return_unit)
       in
       let read =
         read
-          (fun _i -> P.Contents.find t k >|= get)
+          (fun _i -> P.Contents.find t k p2 >|= get)
           (fun i -> check S.contents_t (Fmt.strf "contents %d" i) v)
       in
       perform (write 1) >>= fun () ->

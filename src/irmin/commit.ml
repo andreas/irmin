@@ -72,7 +72,7 @@ struct
 
   let find (_, t) = S.find t
 
-  let merge_node (t, _) = Merge.f (N.merge t)
+  let merge_node (t, _) = Merge.f (N.merge t N.Path.empty)
 
   let pp_key = Type.pp S.Key.t
 

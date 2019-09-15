@@ -184,7 +184,8 @@ module Make_ext
            with type metadata = M.t
             and type hash = H.t
             and type step = P.step)
-    (CT : S.COMMIT with type hash = H.t) =
+    (CT : S.COMMIT with type hash = H.t)
+    (Z : S.SERIALIZE with type t = C.t and type key = P.t) =
 struct
   module CA = CA_check_closed (CA)
   module AW = AW_check_closed (AW)
@@ -193,13 +194,9 @@ struct
     module Hash = H
 
     module Contents = struct
-      module CA = struct
-        module Key = Hash
-        module Val = C
-        include CA (Key) (Val)
-      end
+      module CA = CA (Hash) (Contents.String)
 
-      include Contents.Store (CA)
+      include Contents.Store (CA) (Hash) (C) (Z)
     end
 
     module Node = struct
@@ -287,7 +284,8 @@ module Make
 struct
   module N = Node.Make (H) (P) (M)
   module CT = Commit.Make (H)
-  include Make_ext (CA) (AW) (M) (C) (P) (B) (H) (N) (CT)
+  module Z = Serialize.Default (P) (C)
+  include Make_ext (CA) (AW) (M) (C) (P) (B) (H) (N) (CT) (Z)
 end
 
 module Of_private = Store.Make
