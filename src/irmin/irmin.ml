@@ -166,6 +166,12 @@ functor
         S.close t.t )
   end
 
+module Serialize = struct
+  include Serialize
+
+  module type S = S.SERIALIZE
+end
+
 module Make_ext
     (CA : S.CONTENT_ADDRESSABLE_STORE_MAKER)
     (AW : S.ATOMIC_WRITE_STORE_MAKER)

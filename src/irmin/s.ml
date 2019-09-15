@@ -74,6 +74,15 @@ module type CONTENTS = sig
   val merge : t option Merge.t
 end
 
+module type SERIALIZE = sig
+  type t
+  type key
+
+  val encode_bin : key -> t Type.encode_bin
+  val decode_bin : key -> t Type.decode_bin
+  val size_of : key -> t Type.size_of
+end
+
 module type CONTENT_ADDRESSABLE_STORE = sig
   type 'a t
 

@@ -1212,6 +1212,25 @@ module Contents : sig
     STORE with type 'a t = 'a S.t and type key = S.key and type value = S.value
 end
 
+module Serialize : sig
+  module type S = sig
+    type t
+    type key
+
+    val encode_bin : key -> t Type.encode_bin
+    val decode_bin : key -> t Type.decode_bin
+    val size_of : key -> t Type.size_of
+  end
+
+  type ('a, 'b) t = (module S with type key = 'a and type t = 'b)
+
+  module Default (K : Type.S) (V : Type.S) : S with type t = V.t and type key = K.t
+
+  val to_bin_string : ('a, 'b) t -> 'a -> 'b -> string
+  val of_bin_string : ('a, 'b) t -> 'a -> string -> ('b, [ `Msg of string ]) result
+end
+
+
 (** User-defined branches. *)
 module Branch : sig
   (** {1 Branches} *)
